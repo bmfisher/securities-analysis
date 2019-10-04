@@ -1,0 +1,18 @@
+Useful notes
+
+AWS Lightsail DB Connection
+psql "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com user=dbmasteruser dbname=postgres password=XIC[m#7-*foCL~GQtREEN~49ZLsg}>*$"
+
+XIC[m#7-*foCL~GQtREEN~49ZLsg}>*$
+
+
+AWS Lightsail SSH Connection
+ssh ec2-user@18.188.199.250
+
+To copy files
+scp Endpoint_testing.py ec2-user@18.188.199.250:/home/ec2-user/home/code
+
+Dates using datetime
+test = datetime.datetime(int(year), int(month), int(day.lstrip('0')), int(hour.lstrip('0')), int(minute.lstrip('0')))
+
+
