@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS securities_analysis.tweet;
