@@ -10,6 +10,15 @@ from datetime import datetime
 from pytz import timezone
 import time
 
+def ConnectToDatabase():
+    connection_string = "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com"
+    connection_string += " user=dbmasteruser"
+    connection_string += " dbname=postgres"
+    connection_string += " password=XIC[m#7-*foCL~GQtREEN~49ZLsg}>*$"
+    
+    db_connection = psycopg2.connect(connection_string)
+    return db_connection
+    
 def CommitAndClose(db_cursor, db_connection):
     db_connection.commit()
     db_cursor.close()
@@ -18,7 +27,7 @@ def CommitAndClose(db_cursor, db_connection):
 def GetMostRecentStoredPriceDatetime():
     db_connection = ConnectToDatabase()
     db_cursor = db_connection.cursor()
-    time_query = "SELECT DISTINCT quote_time FROM price ORDER BY quote_time FETCH FIRST 1 ROWS ONLY;"
+    time_query = "SELECT DISTINCT quote_time FROM price ORDER BY quote_time desc FETCH FIRST 1 ROWS ONLY;"
     db_cursor.execute(time_query)
     time = db_cursor.fetchone()
     
@@ -34,15 +43,6 @@ def StoredTodaysPrices(current_time):
 
 def IsWeekday(date):
     return date.weekday() >= 0 and date.weekday() <= 4
-
-def ConnectToDatabase():
-    connection_string = "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com"
-    connection_string += " user=dbmasteruser"
-    connection_string += " dbname=postgres"
-    connection_string += " password=XIC[m#7-*foCL~GQtREEN~49ZLsg}>*$"
-    
-    db_connection = psycopg2.connect(connection_string)
-    return db_connection
 
 def GetTickers(db_cursor):
     queryString = "SELECT company_id, ticker FROM company;"
