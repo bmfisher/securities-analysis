@@ -9,68 +9,91 @@ import psycopg2
 from datetime import datetime
 from pytz import timezone
 import time
-import oauth2
-import base64
-import urllib.parse
 import TwitterAPI
 
 CONSUMER_KEY = 'Omh2yjIJ5wQHAO9svFfLzymOx'
 CONSUMER_SECRET = 'UAMhVFK2sSdez92DbYAw1TPcWmxUFRhpDJbY3WdN5H5GxxqIJv'
-OAUTH2_TOKEN = 'https://api.twitter.com/oauth2/token'
 ACCESS_TOKEN = '1162080468289744896-rPDvTmJ0BqDYXFhcmUz9E013wKsV8P'
 ACCESS_SECRET = 'vs5Xye75fwIs4lLqlaexRAlsGsONFclB6h48OzJ1gDSGl'
 
-def get_bearer_token(consumer_key, consumer_secret):
-    # enconde consumer key
-    consumer_key = urllib.parse.quote(consumer_key)
-    # encode consumer secret
-    consumer_secret = urllib.parse.quote(consumer_secret)
-    # create bearer token
-    bearer_token = consumer_key + ':' + consumer_secret
-    # base64 encode the token
-    base64_encoded_bearer_token = base64.b64encode(bearer_token.encode('utf-8'))
-    # set headers
-    headers = {
-        "Authorization": "Basic " + base64_encoded_bearer_token.decode('utf-8') + "",
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "Content-Length": "29"}
 
-    response = requests.post(OAUTH2_TOKEN, headers=headers, data={'grant_type': 'client_credentials'})
-    to_json = response.json()
-    return to_json['access_token']
-
-api = TwitterAPI.TwitterAPI(consumer_key=CONSUMER_KEY,
+def InitializeTwitterApi():
+    return TwitterAPI.TwitterAPI(consumer_key=CONSUMER_KEY,
                   consumer_secret=CONSUMER_SECRET,
                   access_token_key=ACCESS_TOKEN,
                   access_token_secret=ACCESS_SECRET)
 
+def ConnectToDatabase():
+    connection_string = "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com"
+    connection_string += " user=dbmasteruser"
+    connection_string += " dbname=postgres"
+    connection_string += " password=XIC[m#7-*foCL~GQtREEN~49ZLsg}>*$"
+    
+    db_connection = psycopg2.connect(connection_string)
+    return db_connection
+    
+def CommitAndClose(db_cursor, db_connection):
+    db_connection.commit()
+    db_cursor.close()
+    db_connection.close()
 
-def createSearch(params):
+def ExecuteStatement(db_cursor, statement):
+    db_cursor.execute(statement)
+
+def IsWeekday(date):
+    return date.weekday() >= 0 and date.weekday() <= 4
+
+def GetSearchTerms(db_cursor):
+    ExecuteStatement(db_cursor, "SELECT company_id, search_text FROM search;")
+    return {search[0]:search[1] for search in db_cursor.fetchall()}
+
+def UpdateMinMaxTweetId(db_cursor, id_min_max):
+    base_query = "SELECT twitter_tweet_id FROM tweet WHERE company_id = "
+    for ident in id_min_max.keys():
+        max_query = base_query + str(ident) + " ORDER BY post_time desc FETCH FIRST 1 ROWS ONLY;"
+        min_query = base_query + str(ident) + " ORDER BY post_time asc FETCH FIRST 1 ROWS ONLY;"
+        ExecuteStatement(db_cursor, max_query)
+        max_tweet_id = db_cursor.fetchone()
+        ExecuteStatement(db_cursor, min_query)
+        min_tweet_id = db_cursor.fetchone()
+        if(min_tweet_id):
+            id_min_max[ident]['min'] = min_tweet_id[0]
+        if(max_tweet_id):
+            id_min_max[ident]['max'] = max_tweet_id[0]
+
+def GetCompanyMinMaxTweetId(db_cursor):
+    ExecuteStatement(db_cursor, "SELECT company_id FROM company;")
+    ids = db_cursor.fetchall()
+    id_min_max = {ident[0]: {'min': '0', 'max': '0'} for ident in ids}
+    UpdateMinMaxTweetId(db_cursor, id_min_max)
+    return id_min_max
+
+def StoreCompanyTweets(db_cursor, company_id, tweets):
+    insert_statement = "INSERT INTO tweet (company_id, twitter_tweet_id, full_text, post_time) VALUES "
+
+    for tweet in tweets:
+        twitter_tweet_id = str(tweet['id_str'])
+        full_text = str(tweet['full_text']).replace("'", "''")
+        post_time = datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S %z %Y')
+
+        insert_statement += "({0}, '{1}', '{2}', '{3}'), ".format(company_id, twitter_tweet_id, full_text, post_time)
+
+    insert_statement = insert_statement[:-2] + ";"
+    print(insert_statement)
+    ExecuteStatement(db_cursor, insert_statement)
+
+def CreateSearch(api, params):
     return api.request('search/tweets', params).json()['statuses']
 
-# def build_url(search="", maxResults='100', fromDate='201910100930', toDate='201910101600'):
-#     base = 'https://api.twitter.com/1.1/search/'
-#     # product = '30day/'
-#     label = 'tweets.json'
-#     querystring = '?query=' + search + ' lang:en' + '&maxResults=' + maxResults
-#     querystring += '&fromDate=' + fromDate + '&toDate=' + toDate
-#     return base+label+querystring
-
-# test_token = get_bearer_token(CONSUMER_KEY, CONSUMER_SECRET)
-
-# def getResult(url=build_url(search='@jpmorgan')):
-#     return requests.get(url, headers={'Authorization': 'Bearer '+test_token}).json()
-
-def printResults(res):
+def PrintResults(res):
     for tweet in res:
         print("Date: ", datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S %z %Y'), "\n\t Text: ", tweet['full_text'])
 
-# res = getResult(build_url(search='@jpmorgan'))
-# tweets = res['results']
-res = createSearch({'q': '@jpmorgan', 'count': '10', 'tweet_mode': 'extended'})
 
+api = InitializeTwitterApi()
 
-#print(testResult.json())
-#datetime.strptime(times[0], "%a %b %d %H:%M:%S %z %Y")
+res = CreateSearch(api, {'q': '@jpmorgan', 'count': '10', 'tweet_mode': 'extended'})
 
-#Must account for truncation if tweet['truncated'] is true - look for tweet['extended_tweet']['full_text']
+db_conn = ConnectToDatabase()
+db_cursor = db_conn.cursor()
+
