@@ -6,7 +6,10 @@
 import requests
 import json
 import psycopg2
-from datetime import datetime
+import psycopg2.extensions
+psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
+psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
+from datetime import datetime, timedelta
 from pytz import timezone
 import time
 import TwitterAPI
@@ -45,11 +48,37 @@ def IsWeekday(date):
 
 def GetSearchTerms(db_cursor):
     ExecuteStatement(db_cursor, "SELECT company_id, search_text FROM search;")
-    return {search[0]:search[1] for search in db_cursor.fetchall()}
+    items = {}
+    for search in db_cursor.fetchall():
+        if search[0] not in items.keys():
+            items.update({search[0]: [search[1]]})
+        else:
+            items[search[0]].append(search[1])
+    return items
 
-def UpdateMinMaxTweetId(db_cursor, id_min_max):
+def GetOldestTimestamp(db_cursor, company_id):
+    query = """SELECT post_time FROM tweet WHERE company_id = {0} ORDER BY post_time asc FETCH FIRST 1 ROWS ONLY;""".format(company_id)
+    ExecuteStatement(db_cursor, query)
+
+    res = db_cursor.fetchone()
+    return datetime(res[0])
+
+def GetLatestTimestamp(db_cursor, company_id):
+    query = """SELECT post_time FROM tweet WHERE company_id = {0} ORDER BY post_time desc FETCH FIRST 1 ROWS ONLY;""".format(company_id)
+    ExecuteStatement(db_cursor, query)
+
+    res = db_cursor.fetchone()
+    return res[0]
+
+def GetMinTweetIdGreaterThanTime(db_cursor, company_id, time_cutoff):
+    query = "SELECt twitter_tweet_id FROM tweet WHERE company_id = {0} AND post_time > '{1}' ORDER BY post_time asc FETCH FIRST 1 ROWS ONLY;".format(company_id, time_cutoff.__format__("%Y-%m-%d %H:%M:%S"))
+
+    ExecuteStatement(db_cursor, query)
+    return db_cursor.fetchone()[0]
+
+def UpdateMinMaxTweetId(db_cursor, id_min_max, idents):
     base_query = "SELECT twitter_tweet_id FROM tweet WHERE company_id = "
-    for ident in id_min_max.keys():
+    for ident in idents:
         max_query = base_query + str(ident) + " ORDER BY post_time desc FETCH FIRST 1 ROWS ONLY;"
         min_query = base_query + str(ident) + " ORDER BY post_time asc FETCH FIRST 1 ROWS ONLY;"
         ExecuteStatement(db_cursor, max_query)
@@ -65,35 +94,130 @@ def GetCompanyMinMaxTweetId(db_cursor):
     ExecuteStatement(db_cursor, "SELECT company_id FROM company;")
     ids = db_cursor.fetchall()
     id_min_max = {ident[0]: {'min': '0', 'max': '0'} for ident in ids}
-    UpdateMinMaxTweetId(db_cursor, id_min_max)
+    UpdateMinMaxTweetId(db_cursor, id_min_max, [ident[0] for ident in ids])
     return id_min_max
 
 def StoreCompanyTweets(db_cursor, company_id, tweets):
-    insert_statement = "INSERT INTO tweet (company_id, twitter_tweet_id, full_text, post_time) VALUES "
+    insert_statement = u"""INSERT INTO tweet (company_id, twitter_tweet_id, full_text, post_time) VALUES """
+
+    sql_params = []
 
     for tweet in tweets:
-        twitter_tweet_id = str(tweet['id_str'])
-        full_text = str(tweet['full_text']).replace("'", "''")
-        post_time = datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S %z %Y')
+        twitter_tweet_id = tweet['id_str']
+        full_text = tweet['full_text']
+        post_time = datetime.strptime(str(tweet['created_at']).replace('+0000', ''), '%a %b %d %H:%M:%S %Y')
 
-        insert_statement += "({0}, '{1}', '{2}', '{3}'), ".format(company_id, twitter_tweet_id, full_text, post_time)
+        insert_statement += "(%s, %s, %s, %s), "
+        sql_params.append(company_id)
+        sql_params.append(twitter_tweet_id)
+        sql_params.append(full_text)
+        sql_params.append(str(post_time))
 
-    insert_statement = insert_statement[:-2] + ";"
-    print(insert_statement)
-    ExecuteStatement(db_cursor, insert_statement)
+    insert_statement = insert_statement[:-2] + """;"""
+    db_cursor.execute(insert_statement, sql_params)
 
 def CreateSearch(api, params):
-    return api.request('search/tweets', params).json()['statuses']
+    res = api.request('search/tweets', params).json()
+    if 'statuses' in res.keys():
+        return res['statuses']
+    else:
+        return []
 
-def PrintResults(res):
-    for tweet in res:
-        print("Date: ", datetime.strptime(tweet['created_at'], '%a %b %d %H:%M:%S %z %Y'), "\n\t Text: ", tweet['full_text'])
+def GetAndStorePastTweets(api, company_id, id_min_max, search_terms):
+    for term in search_terms:
+        oldest_tweets_found = False
+        while not oldest_tweets_found:
+            params = {}
+            params.update({'lang': 'en'})
+            params.update({'tweet_mode': 'extended'})
+            params.update({'count': '100'})
+            params.update({'result_type': 'recent'})
+            params.update({'q': term})
+            if(id_min_max[company_id]['min'] != '0'):
+                params.update({'max_id': id_min_max[company_id]['min']})
+
+            start_time = datetime.now()
+            tweet_batch = CreateSearch(api, params)
+
+            if (len(tweet_batch) <= 1):
+                oldest_tweets_found = True
+            else:
+                db_conn = ConnectToDatabase()
+                StoreCompanyTweets(db_conn.cursor(), company_id, tweet_batch)
+                CommitAndClose(db_conn.cursor(), db_conn)
+
+                db_conn = ConnectToDatabase()
+                UpdateMinMaxTweetId(db_conn.cursor(), id_min_max, [company_id])
+                CommitAndClose(db_conn.cursor(), db_conn)
+
+            duration = datetime.now() - start_time
+
+            if duration.total_seconds() < 5:
+                time.sleep(round(5 - duration.total_seconds(), 2) + .01)
+
+def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
+    max_current = id_min_max[company_id]['max']
+    db_conn = ConnectToDatabase()
+    max_current_timestamp = GetLatestTimestamp(db_conn.cursor(), company_id)
+    CommitAndClose(db_conn.cursor(), db_conn)
+
+    min_new = '0'
+
+    term_done = {term: False for term in search_terms}
+
+    while False in term_done.values():
+
+        for term in term_done.keys():
+            if not term_done[term]:
+                params = {}
+                params.update({'lang': 'en'})
+                params.update({'tweet_mode': 'extended'})
+                params.update({'count': '100'})
+                params.update({'q': term})
+                params.update({'since_id': max_current})
+                if(min_new != '0'):
+                    params.update({'max_id': min_new})
+
+                start_time = datetime.now()
+                tweet_batch = CreateSearch(api, params)
+
+                if(len(tweet_batch) <= 1):
+                    term_done[term] = True
+
+                db_conn = ConnectToDatabase()
+                StoreCompanyTweets(db_conn.cursor(), company_id, tweet_batch)
+                CommitAndClose(db_conn.cursor(), db_conn)
+                
+                duration = datetime.now() - start_time
+                if duration.total_seconds() < 5:
+                    time.sleep(round(5 - duration.total_seconds(), 2) + .01)
+
+        
+        db_conn = ConnectToDatabase()
+        min_new = GetMinTweetIdGreaterThanTime(db_conn.cursor(), company_id, max_current_timestamp)
+        CommitAndClose(db_conn.cursor(), db_conn)
 
 
 api = InitializeTwitterApi()
 
-res = CreateSearch(api, {'q': '@jpmorgan', 'count': '10', 'tweet_mode': 'extended'})
-
 db_conn = ConnectToDatabase()
 db_cursor = db_conn.cursor()
+
+ident_min_max = GetCompanyMinMaxTweetId(db_cursor)
+
+terms = GetSearchTerms(db_cursor)
+
+CommitAndClose(db_cursor, db_conn)
+
+for company in terms.keys():
+    GetAndStorePastTweets(api, company, ident_min_max, terms[company])
+
+while True:
+    for company in terms.keys():
+        db_conn = ConnectToDatabase()
+        db_cursor = db_conn.cursor()
+        terms = GetSearchTerms(db_cursor)
+        CommitAndClose(db_cursor, db_conn)
+
+        GetAndStoreLatestTweets(api, company, ident_min_max, terms[company])
 

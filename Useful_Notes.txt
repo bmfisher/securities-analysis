@@ -16,3 +16,9 @@ Dates using datetime
 test = datetime.datetime(int(year), int(month), int(day.lstrip('0')), int(hour.lstrip('0')), int(minute.lstrip('0')))
 
 
+Need to:
+    select a time with advisor - 30 minute - Mitch doesn't have to be present
+    Reserve a room in the main office: 2183, 2168, 3099a
+        see Wynne in the 2184
+    Submit advertisement image file - 1920x1080 to Mitch
+    
