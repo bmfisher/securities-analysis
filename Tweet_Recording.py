@@ -171,8 +171,8 @@ def GetAndStorePastTweets(api, company_id, id_min_max, search_terms):
     return api, id_min_max
 
 def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
-    max_current = id_min_max[company_id]['max']
     db_conn = ConnectToDatabase()
+    max_current = UpdateMinMaxTweetId(db_conn.cursor(), id_min_max, [company_id])[company_id]['max']
     max_current_timestamp = GetLatestTimestamp(db_conn.cursor(), company_id)
     CommitAndClose(db_conn.cursor(), db_conn)
 
@@ -182,6 +182,7 @@ def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
 
     while False in term_done.values():
 
+        new_tweets_added = False
         for term in term_done.keys():
             if not term_done[term]:
                 params = {}
@@ -196,21 +197,22 @@ def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
                 start_time = datetime.now()
                 api, tweet_batch = CreateSearch(api, params)
 
-                if(len(tweet_batch) <= 1):
+                if(len(tweet_batch) <= 2):
                     term_done[term] = True
-
-                db_conn = ConnectToDatabase()
-                StoreCompanyTweets(db_conn.cursor(), company_id, tweet_batch)
-                CommitAndClose(db_conn.cursor(), db_conn)
+                else:
+                    db_conn = ConnectToDatabase()
+                    StoreCompanyTweets(db_conn.cursor(), company_id, tweet_batch)
+                    new_tweets_added = True
+                    CommitAndClose(db_conn.cursor(), db_conn)
                 
                 duration = datetime.now() - start_time
                 if duration.total_seconds() < 5:
                     time.sleep(round(5 - duration.total_seconds(), 2) + .01)
 
-        
-        db_conn = ConnectToDatabase()
-        min_new = GetMinTweetIdGreaterThanTime(db_conn.cursor(), company_id, max_current_timestamp)
-        CommitAndClose(db_conn.cursor(), db_conn)
+        if new_tweets_added:        
+            db_conn = ConnectToDatabase()
+            min_new = GetMinTweetIdGreaterThanTime(db_conn.cursor(), company_id, max_current_timestamp)
+            CommitAndClose(db_conn.cursor(), db_conn)
     return api, id_min_max
 
 
@@ -229,12 +231,13 @@ for company in terms.keys():
     api, ident_min_max = GetAndStorePastTweets(api, company, ident_min_max, terms[company])
 
 while True:
+    db_conn = ConnectToDatabase()
+    db_cursor = db_conn.cursor()
+    terms = GetSearchTerms(db_cursor)
+    CommitAndClose(db_cursor, db_conn)
+    api = InitializeTwitterApi()
     for company in terms.keys():
-        db_conn = ConnectToDatabase()
-        db_cursor = db_conn.cursor()
-        terms = GetSearchTerms(db_cursor)
-        CommitAndClose(db_cursor, db_conn)
-        api = InitializeTwitterApi()
-
         api, ident_min_max = GetAndStoreLatestTweets(api, company, ident_min_max, terms[company])
+
+    time.sleep(60)
 
