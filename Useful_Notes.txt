@@ -19,6 +19,8 @@ Useful queries
 
 select company_id, count(*), age(max(post_time), min(post_time)) from tweet group by company_id order by company_id;
 
+ select company_id, count(*), count(*) - count(distinct twitter_tweet_id) as diff, age(max(post_time), min(post_time)) from tweet group by company_id order by company_id;
+
 select cast(quote_time as date), count(*) from price group by cast(quote_time as date) order by cast(quote_time as date);
 
 Need to:

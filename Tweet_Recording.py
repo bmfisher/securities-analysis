@@ -70,8 +70,8 @@ def GetLatestTimestamp(db_cursor, company_id):
     res = db_cursor.fetchone()
     return res[0]
 
-def GetMinTweetIdGreaterThanTime(db_cursor, company_id, time_cutoff):
-    query = "SELECT twitter_tweet_id FROM tweet WHERE company_id = {0} AND post_time > '{1}' ORDER BY post_time asc FETCH FIRST 1 ROWS ONLY;".format(company_id, time_cutoff.__format__("%Y-%m-%d %H:%M:%S"))
+def GetMinTweetIdGreaterThanTime(db_cursor, company_id, tweet_id_cutoff):
+    query = "SELECT twitter_tweet_id FROM tweet WHERE company_id = {0} AND twitter_tweet_id > '{1}' ORDER BY twitter_tweet_id asc FETCH FIRST 1 ROWS ONLY;".format(company_id, tweet_id_cutoff)
 
     ExecuteStatement(db_cursor, query)
     return db_cursor.fetchone()[0]
@@ -173,7 +173,6 @@ def GetAndStorePastTweets(api, company_id, id_min_max, search_terms):
 def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
     db_conn = ConnectToDatabase()
     max_current = UpdateMinMaxTweetId(db_conn.cursor(), id_min_max, [company_id])[company_id]['max']
-    max_current_timestamp = GetLatestTimestamp(db_conn.cursor(), company_id)
     CommitAndClose(db_conn.cursor(), db_conn)
 
     min_new = '0'
@@ -211,7 +210,7 @@ def GetAndStoreLatestTweets(api, company_id, id_min_max, search_terms):
 
         if new_tweets_added:        
             db_conn = ConnectToDatabase()
-            min_new = GetMinTweetIdGreaterThanTime(db_conn.cursor(), company_id, max_current_timestamp)
+            min_new = GetMinTweetIdGreaterThanTime(db_conn.cursor(), company_id, max_current)
             CommitAndClose(db_conn.cursor(), db_conn)
     return api, id_min_max
 
