@@ -1,0 +1,39 @@
+body{
+    background-color: #4E4D4D;
+}
+
+h1{
+    text-align: center;
+    color: white;
+}
+
+h2,h3,h4{
+    color: white;
+}
+
+
+.Interact{
+    width: 25%;
+    float: left;
+}
+
+.OneDay{
+    float: left;
+    padding-left: 3em;
+}
+
+.OneDayGraphArea{
+    float: left;
+    padding-left: 3em;
+    padding-top: 2em;
+}
+
+.BigGraphArea{
+    float: left;
+    padding-top: 5rem;
+    padding-bottom: 15em;
+}
+
+.Statistics{
+    float: left;
+}
