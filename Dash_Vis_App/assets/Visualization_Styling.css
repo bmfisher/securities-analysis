@@ -37,3 +37,9 @@ h2,h3,h4{
 .Statistics{
     float: left;
 }
+
+.DayStatsTable{
+    float: left;
+    margin-top: 2em;
+    padding-bottom: 8em;
+}

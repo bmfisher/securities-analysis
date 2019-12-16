@@ -4,6 +4,7 @@
 # Dash application for data visualization
 
 import dash
+import dash_table
 import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output
@@ -15,6 +16,7 @@ import psycopg2
 from datetime import datetime, time as tme
 from pytz import timezone
 import time
+import numpy as np
 
 def ConnectToDatabase():
     connection_string = "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com"
@@ -175,7 +177,18 @@ app.layout = html.Div(children=[
         dcc.Graph(id='one-day-stocks')
     ]),
 
-
+    html.Div(className='DayStatsTable', children=[
+       dash_table.DataTable(
+           id='stats-table',
+            columns=[
+                {'name': 'Date', 'id': 'Date'},
+                {'name': 'Open', 'id': 'Open'},
+                {'name': 'Close', 'id': 'Close'},
+                {'name': 'Change', 'id': 'Change'},
+                {'name': 'Sentiment', 'id': 'Sentiment'}
+            ]   
+        ) 
+    ]),
     
     # html.Div(className='BigGraphArea', children=[
     #     dcc.Graph(id='stocks-vs-sentiment')
@@ -272,6 +285,32 @@ def update_statistics(company_key, selected_date):
         html.H3('Price count: {}'.format(len(db_price[company_key]))),
         html.H3('Tweet count: {}'.format(len(averaged_list[company_key][0]))),
         html.H3('Price Change: {}%'.format(price_change_pct))
+    ]
+
+
+@app.callback(
+    Output('stats-table', 'data'),
+    [Input('ticker-select', 'value')]
+)
+def update_stats_table(company_key):
+    
+    dates = list(set(x[0].date() for x in db_price[company_key]))
+    dates.sort(reverse=True)
+
+    return [
+        {
+            'Date': date,
+            'Open': min([x for x in db_price[company_key] if x[0].date() == date])[1],
+            'Close': max([x for x in db_price[company_key] if x[0].date() == date])[1],
+            'Change': round(
+                (max([x for x in db_price[company_key] if x[0].date() == date])[1] - 
+                min([x for x in db_price[company_key] if x[0].date() == date])[1]) / 
+                min([x for x in db_price[company_key] if x[0].date() == date])[1] * 100, 2),
+            'Sentiment': 0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == date]) <= 0 else
+                            round(sum([x[1] for x in db_tweet[company_key] if x[0].date() == date]) / 
+                                len([x[1] for x in db_tweet[company_key] if x[0].date() == date]), 4)
+        }
+        for date in dates
     ]
 
 if __name__ == '__main__':
