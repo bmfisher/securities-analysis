@@ -199,7 +199,7 @@ app.layout = html.Div(children=[
             ],
             style_table={
                 'overflowX': 'scroll',
-                'width': '800px',
+                'width': '1400px',
             },
             fixed_rows={
                 'headers': True,
@@ -214,42 +214,37 @@ app.layout = html.Div(children=[
                 'backgroundColor': 'rgb(50, 50, 50)',
                 'color': 'white',
                 'textAlign': 'left'
+            },
+            style_filter={
+                'fontWeight': 'bold',
+                'backgroundColor': 'rgb(120,120,120)'
             },   
             style_data_conditional=[
                 {
                     'if': {'row_index': 'odd'},
                     'backgroundColor': 'rgb(60, 60, 60)'
-                }
-            ]
+                },
+                {
+                    'if': {
+                        'column_id': 'Change',
+                        'filter_query': '{Change} > 0'
+                    },
+                    'color': 'green'
+                },
+                {
+                    'if': {
+                        'column_id': 'Change',
+                        'filter_query': '{Change} < 0'
+                    },
+                    'color': 'red'
+                },
+            ],
+            filter_action="native",
+            sort_action="native",
+            sort_mode="multi",
         ) 
     ]),
-    
-    # html.Div(className='BigGraphArea', children=[
-    #     dcc.Graph(id='stocks-vs-sentiment')
-    # ])
 ])
-
-# @app.callback(
-#     Output('stocks-vs-sentiment', 'figure'),
-#     [Input('ticker-select', 'value')]
-# )
-# def update_main_graph(company_key):
-#     fig = go.Figure()
-
-#     fig.add_trace(
-#         go.Scatter(
-#             x=[time_price[0] for time_price in db_price[company_key]], 
-#             y=[time_price[1] for time_price in db_price[company_key]], 
-#             name='stock-data',
-#         )
-#     )
-    
-#     fig.update_layout(
-#         title_text='Stock Data for {}'.format(db_company[company_key][0]),
-#         xaxis_rangeslider_visible=True
-#     )
-        
-#     return fig
     
 
 @app.callback(
@@ -268,7 +263,8 @@ def update_one_day_graph(company_key, selected_date, show_tweets, k_average):
         go.Scatter(
             x=[time_price[0] for time_price in db_price[company_key] if time_price[0].date() == selected_date.date()], 
             y=[time_price[1] for time_price in db_price[company_key] if time_price[0].date() == selected_date.date()], 
-            name='stock-data',
+            name='price',
+            marker_color='rgb(35,135,35)'
         ),
         secondary_y=False,
     )
@@ -286,23 +282,29 @@ def update_one_day_graph(company_key, selected_date, show_tweets, k_average):
                     if time_tweet[0].date() == selected_date.date() and time_tweet[0].time() >= tme(hour=9, minute=30) and time_tweet[0].time() < tme(hour=16, minute=0)],
                 type='scatter',
                 mode='markers', 
-                name='sentiment-data'
+                name='tweets'
             ),
             secondary_y=True,
         )
 
+    fig.update_yaxes(title_text="<b>Stock Price</b>", secondary_y=False)
+    fig.update_yaxes(title_text="<b>Tweet Sentiment</b>", secondary_y=True)
+
     fig.update_layout(
-        title_text='{} on {}'.format(db_company[company_key][1], selected_date.strftime('%B %d, %Y')),
+        template='plotly_dark',
+        title_text='<b>{} - {}</b>'.format(selected_date.strftime('%m/%d/%Y'), db_company[company_key][0]),
+        xaxis_title='<b>Time</b>',
+        
         autosize=False,
         width=800,
         height=500,
         margin=go.layout.Margin(
-            l=50,
-            r=50,
-            b=100,
-            t=100,
-            pad=4
-        ),
+            l=100,
+            r=100,
+            b=50,
+            t=50,
+            pad=10
+        )
     )
 
     return fig
@@ -421,22 +423,6 @@ def update_stats_table(company_key):
     df = pd.DataFrame(data)
 
     return df.to_dict('records')
-
-    # return [
-    #     {
-    #         'Date': date,
-    #         'Open': min([x for x in db_price[company_key] if x[0].date() == date])[1],
-    #         'Close': max([x for x in db_price[company_key] if x[0].date() == date])[1],
-    #         'Change': round(
-    #             (max([x for x in db_price[company_key] if x[0].date() == date])[1] - 
-    #             min([x for x in db_price[company_key] if x[0].date() == date])[1]) / 
-    #             min([x for x in db_price[company_key] if x[0].date() == date])[1] * 100, 2),
-    #         'Sentiment': 0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == date]) <= 0 else
-    #                         round(sum([x[1] for x in db_tweet[company_key] if x[0].date() == date]) / 
-    #                             len([x[1] for x in db_tweet[company_key] if x[0].date() == date]), 4)
-    #     }
-    #     for date in dates
-    # ]
 
 if __name__ == '__main__':
     app.run_server(debug=True)
