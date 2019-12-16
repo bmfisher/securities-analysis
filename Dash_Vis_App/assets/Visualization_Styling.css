@@ -1,5 +1,5 @@
 body{
-    background-color: #4E4D4D;
+    background-color: rgb(40, 40, 40);
 }
 
 h1{
@@ -13,19 +13,30 @@ h2,h3,h4{
 
 
 .Interact{
-    width: 25%;
+    width: 600px;
     float: left;
 }
 
 .OneDay{
+    width: 150px;
     float: left;
-    padding-left: 3em;
+}
+
+.ShowTweets{
+    float: left;
+    width: 150px;
+    padding-left: 5px;
+}
+
+.AverageTweets{
+    float: left;
+    width: 250px;
 }
 
 .OneDayGraphArea{
     float: left;
-    padding-left: 3em;
-    padding-top: 2em;
+    padding-left: 4em;
+    padding-top: 1em;
 }
 
 .BigGraphArea{
@@ -36,10 +47,14 @@ h2,h3,h4{
 
 .Statistics{
     float: left;
+    color: white;
+    padding-top: 25px;
+    font-size: 19px;
 }
 
 .DayStatsTable{
     float: left;
     margin-top: 2em;
     padding-bottom: 8em;
+    font-size: 18px;
 }

@@ -17,6 +17,8 @@ from datetime import datetime, time as tme
 from pytz import timezone
 import time
 import numpy as np
+from collections import OrderedDict
+import pandas as pd
 
 def ConnectToDatabase():
     connection_string = "host=ls-09e48ef281d3784d651efb2f69c508d20bec3da8.c8o3a3nfv7m4.us-east-2.rds.amazonaws.com"
@@ -122,7 +124,7 @@ app.layout = html.Div(children=[
 
     html.Div(className='Interact', children=[
 
-        html.H4(children='Company:'),
+        html.H3(children='Company:'),
         
         dcc.Dropdown(
             id='ticker-select',
@@ -133,60 +135,92 @@ app.layout = html.Div(children=[
             value=11
         ),
 
-        html.H4(children='Average Tweets in Groups of:'),
-        
-        dcc.Dropdown(
-            id='sentiment-neighbor-average',
-            className='SentimentNeighborAverage',
-            options=[
-                {'label': 'None', 'value': 0},
-                {'label': '5', 'value': 5},
-                {'label': '10', 'value': 10},
-                {'label': '25', 'value': 25}
-            ],
-            value=0
-        ),
+        html.Div(className='OneDay', children=[
+            html.H3(children='Select A Date:'),
+            dcc.DatePickerSingle(
+                id='date-picker-single',
+                date=str(datetime(2019, 11,5))
+            )
+        ]),
 
-        html.H4(children='Show Tweets:'),
         
-        dcc.RadioItems(
-            id='show-tweets',
-            className='ShowTweets',
-            options=[
-                {'label': 'Yes', 'value': 1},
-                {'label': 'No', 'value': 0}
-            ],
-            value=0,
-            style={
-                'color': 'white'
-            }
-        ),
+        html.Div(className='ShowTweets', children=[
+            html.H3(children='Show Tweets:'),
+            
+            dcc.RadioItems(
+                id='show-tweets',
+                className='ShowTweets',
+                options=[
+                    {'label': 'Yes', 'value': 1},
+                    {'label': 'No', 'value': 0}
+                ],
+                value=0,
+                style={
+                    'color': 'white'
+                }
+            ),
 
+        ]),
+
+        html.Div(className='AverageTweets', children=[
+            html.H3(children='Average Tweets in Groups of:'),
+        
+            dcc.Dropdown(
+                id='sentiment-neighbor-average',
+                className='SentimentNeighborAverage',
+                options=[
+                    {'label': 'None', 'value': 0},
+                    {'label': '5', 'value': 5},
+                    {'label': '10', 'value': 10},
+                    {'label': '25', 'value': 25}
+                ],
+                value=0
+            ),
+        ]),
+        
         html.Div(className='Statistics', id='statistics'),
     ]),
 
-    html.Div(className='OneDay', children=[
-        html.H3(children='Select A Date:'),
-        dcc.DatePickerSingle(
-            id='date-picker-single',
-            date=str(datetime(2019, 11,5))
-        )
-    ]),
+
 
     html.Div(className='OneDayGraphArea', children=[
         dcc.Graph(id='one-day-stocks')
     ]),
 
     html.Div(className='DayStatsTable', children=[
-       dash_table.DataTable(
-           id='stats-table',
+        dash_table.DataTable(
+            id='stats-table',
             columns=[
                 {'name': 'Date', 'id': 'Date'},
                 {'name': 'Open', 'id': 'Open'},
                 {'name': 'Close', 'id': 'Close'},
                 {'name': 'Change', 'id': 'Change'},
                 {'name': 'Sentiment', 'id': 'Sentiment'}
-            ]   
+            ],
+            style_table={
+                'overflowX': 'scroll',
+                'width': '800px',
+            },
+            fixed_rows={
+                'headers': True,
+                'data': 0
+            },
+            style_as_list_view=True,
+            style_header={
+                'backgroundColor': 'rgb(30, 30, 30)',
+                'fontWeight': 'bold'
+            },
+            style_cell={
+                'backgroundColor': 'rgb(50, 50, 50)',
+                'color': 'white',
+                'textAlign': 'left'
+            },   
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': 'rgb(60, 60, 60)'
+                }
+            ]
         ) 
     ]),
     
@@ -279,12 +313,84 @@ def update_one_day_graph(company_key, selected_date, show_tweets, k_average):
     Input('date-picker-single', 'date')]
 )
 def update_statistics(company_key, selected_date):
-    price_change_pct=0.0
+    
+    selected_date = datetime.strptime(selected_date.split(' ')[0], '%Y-%m-%d')
+    price_change_pct = round((max([x for x in db_price[company_key]])[1] - 
+                        min([x for x in db_price[company_key]])[1]) / min([x for x in db_price[company_key]])[1], 2)
     # This will probably work better with markdown
     return [
-        html.H3('Price count: {}'.format(len(db_price[company_key]))),
-        html.H3('Tweet count: {}'.format(len(averaged_list[company_key][0]))),
-        html.H3('Price Change: {}%'.format(price_change_pct))
+        html.Table([
+            html.Tr([
+                html.Td(style={
+                        'width': '400px'
+                    },
+                    children='{} Cumulative Stats:'.format(db_company[company_key][1])
+                ),
+                html.Td(style={
+                        'width': '400px'
+                    },
+                    children='{} on {}:'.format(db_company[company_key][1], selected_date.date())
+                ),
+            ]),
+            html.Tr([
+                html.Td(
+                    html.Table([
+                        html.Tr([
+                            html.Td('Price Count:'),
+                            html.Td(len(db_price[company_key]))
+                        ]),
+                        html.Tr([
+                            html.Td('Tweet Count:'),
+                            html.Td(len(averaged_list[company_key][0]))
+                        ]),
+                        html.Tr([
+                            html.Td('Price Change:'),
+                            html.Td('{}%'.format(price_change_pct))
+                        ]),
+                        html.Tr([
+                            html.Td('Average Sentiment:'),
+                            html.Td(
+                                round(sum([x[1] for x in db_tweet[company_key]]) / 
+                                len([x[1] for x in db_tweet[company_key]]), 4)
+                            )
+                        ])
+                    ])
+                ),
+                html.Td(
+                    html.Table([
+                        html.Tr([
+                            html.Td('Open:'),
+                            html.Td(
+                                'N/A' if len([x for x in db_price[company_key] if x[0].date() == selected_date.date()]) <= 0 else min([x for x in db_price[company_key] if x[0].date() == selected_date.date()])[1]
+                            )
+                        ]),
+                        html.Tr([
+                            html.Td('Close:'),
+                            html.Td(
+                                'N/A' if len([x for x in db_price[company_key] if x[0].date() == selected_date.date()]) <= 0 else max([x for x in db_price[company_key] if x[0].date() == selected_date.date()])[1]
+                            )
+                        ]),
+                        html.Tr([
+                            html.Td('Change:'),
+                            html.Td(
+                                'N/A' if len([x for x in db_price[company_key] if x[0].date() == selected_date.date()]) <= 0 else 
+                                    '{}%'.format(round((max([x for x in db_price[company_key] if x[0].date() == selected_date.date()])[1] - 
+                                            min([x for x in db_price[company_key] if x[0].date() == selected_date.date()])[1]) / 
+                                            max([x for x in db_price[company_key] if x[0].date() == selected_date.date()])[1] * 100, 2))
+                            )
+                        ]),
+                        html.Tr([
+                            html.Td('Sentiment:'),
+                            html.Td(
+                                0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == selected_date.date()]) <= 0 else
+                                round(sum([x[1] for x in db_tweet[company_key] if x[0].date() == selected_date.date()]) / 
+                                len([x[1] for x in db_tweet[company_key] if x[0].date() == selected_date.date()]), 4)
+                            )
+                        ])
+                    ])
+                )
+            ])
+        ])
     ]
 
 
@@ -297,21 +403,40 @@ def update_stats_table(company_key):
     dates = list(set(x[0].date() for x in db_price[company_key]))
     dates.sort(reverse=True)
 
-    return [
-        {
-            'Date': date,
-            'Open': min([x for x in db_price[company_key] if x[0].date() == date])[1],
-            'Close': max([x for x in db_price[company_key] if x[0].date() == date])[1],
-            'Change': round(
+    data = OrderedDict(
+        [
+            ('Date', dates),
+            ('Open', [min([x for x in db_price[company_key] if x[0].date() == date])[1] for date in dates]), 
+            ('Close', [max([x for x in db_price[company_key] if x[0].date() == date])[1] for date in dates]),
+            ('Change', [round(
                 (max([x for x in db_price[company_key] if x[0].date() == date])[1] - 
                 min([x for x in db_price[company_key] if x[0].date() == date])[1]) / 
-                min([x for x in db_price[company_key] if x[0].date() == date])[1] * 100, 2),
-            'Sentiment': 0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == date]) <= 0 else
+                min([x for x in db_price[company_key] if x[0].date() == date])[1] * 100, 2) for date in dates]),
+            ('Sentiment', [0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == date]) <= 0 else
                             round(sum([x[1] for x in db_tweet[company_key] if x[0].date() == date]) / 
-                                len([x[1] for x in db_tweet[company_key] if x[0].date() == date]), 4)
-        }
-        for date in dates
-    ]
+                                len([x[1] for x in db_tweet[company_key] if x[0].date() == date]), 4) for date in dates])
+        ]
+    )
+
+    df = pd.DataFrame(data)
+
+    return df.to_dict('records')
+
+    # return [
+    #     {
+    #         'Date': date,
+    #         'Open': min([x for x in db_price[company_key] if x[0].date() == date])[1],
+    #         'Close': max([x for x in db_price[company_key] if x[0].date() == date])[1],
+    #         'Change': round(
+    #             (max([x for x in db_price[company_key] if x[0].date() == date])[1] - 
+    #             min([x for x in db_price[company_key] if x[0].date() == date])[1]) / 
+    #             min([x for x in db_price[company_key] if x[0].date() == date])[1] * 100, 2),
+    #         'Sentiment': 0.0 if len([x[1] for x in db_tweet[company_key] if x[0].date() == date]) <= 0 else
+    #                         round(sum([x[1] for x in db_tweet[company_key] if x[0].date() == date]) / 
+    #                             len([x[1] for x in db_tweet[company_key] if x[0].date() == date]), 4)
+    #     }
+    #     for date in dates
+    # ]
 
 if __name__ == '__main__':
     app.run_server(debug=True)
