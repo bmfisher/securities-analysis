@@ -179,6 +179,16 @@ app.layout = html.Div(children=[
         ]),
         
         html.Div(className='Statistics', id='statistics'),
+
+        html.Div(className='ThresholdReturns', children=[
+            dcc.Input(
+                placeholder='Enter a Threshold',
+                id='threshold',
+                type='number'
+            ),
+
+            html.Div(className='Returns', id='Returns'),
+        ])
     ]),
 
 
@@ -394,6 +404,41 @@ def update_statistics(company_key, selected_date):
             ])
         ])
     ]
+
+@app.callback(
+    Output('Returns', 'children'),
+    [Input('ticker-select', 'value'),
+    Input('threshold', 'value')]
+)
+def update_returns(company_key, threshold):
+    if threshold is None:
+        threshold = 0.0
+    price_dates = list(set(x[0].date() for x in db_price[company_key]))
+    price_dates.sort(reverse=True)
+    tweet_dates = list(set(x[0].date() for x in db_tweet[company_key]))
+    tweet_dates.sort(reverse=True)
+    dates = [d for d in tweet_dates if d in price_dates]
+    market_buy = min([x for x in db_price[company_key]])[1]
+    market_sell = max([x for x in db_price[company_key]])[1]
+    tweet_returns=[]
+    for date in dates:
+        date_sent = (sum([x[1] for x in db_tweet[company_key] if x[0].date() == date]) / 
+            len([x[1] for x in db_tweet[company_key] if x[0].date() == date]))
+        if date_sent > threshold:
+            tweet_returns.append(
+                max([x for x in db_price[company_key] if x[0].date() == date])[1] -
+                min([x for x in db_price[company_key] if x[0].date() == date])[1]
+            )
+    return [
+        html.H4('Between {} and {} with selected returns above: {}'.format(
+            min(dates).strftime('%m-%d-%Y'),
+            max(dates).strftime('%m-%d-%Y'),
+            threshold
+        )),
+        html.H4('Market Return:    ${}'.format(round(market_sell - market_buy, 2))),
+        html.H4('Selected Returns: ${}'.format(round(sum(tweet_returns), 2)))
+    ]
+    
 
 
 @app.callback(

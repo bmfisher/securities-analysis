@@ -52,6 +52,11 @@ h2,h3,h4{
     font-size: 19px;
 }
 
+.ThresholdReturns{
+    float: left;
+    padding-top: 10px;
+}
+
 .DayStatsTable{
     position: relative;
     margin-top: 50px;
